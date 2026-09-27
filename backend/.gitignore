@@ -1,0 +1,9 @@
+/target
+.env
+
+# Runtime databases and generated data
+/data/
+*.kuzu
+*.db
+*.sqlite
+*.sqlite3
