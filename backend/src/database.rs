@@ -3,8 +3,9 @@ use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
+use uuid::Uuid;
 
-use crate::models::{Task, TaskProposal};
+use crate::models::{Task, TaskProposal, TaskStatus};
 
 // =========================================================
 // SQLITE-VEC REGISTRATION
@@ -189,6 +190,53 @@ impl Database {
             .map_err(|error| format!("Failed to save task: {}", error))?;
 
         Ok(())
+    }
+
+    pub fn list_tasks(&self, limit: usize) -> Result<Vec<Task>, String> {
+        let connection = self.open()?;
+
+        let mut statement = connection
+            .prepare(
+                r#"
+                SELECT id, prompt, status
+                FROM tasks
+                ORDER BY created_at DESC
+                LIMIT ?1
+                "#,
+            )
+            .map_err(|error| format!("Failed to prepare list tasks query: {}", error))?;
+
+        let rows = statement
+            .query_map(params![limit as i64], |row| {
+                let id: String = row.get(0)?;
+                let prompt: String = row.get(1)?;
+                let status: String = row.get(2)?;
+                Ok((id, prompt, status))
+            })
+            .map_err(|error| format!("Failed to query tasks: {}", error))?;
+
+        let mut tasks = Vec::new();
+
+        for row in rows {
+            let (id_str, prompt, status_str) =
+                row.map_err(|error| format!("Failed to read task row: {}", error))?;
+
+            let id = Uuid::parse_str(&id_str)
+                .map_err(|error| format!("Failed to parse task UUID '{}': {}", id_str, error))?;
+
+            let trimmed_status = status_str.trim().trim_matches('"');
+            let status: TaskStatus = serde_json::from_str(&format!("\"{}\"", trimmed_status))
+                .map_err(|error| {
+                    format!(
+                        "Failed to deserialize task status '{}': {}",
+                        status_str, error
+                    )
+                })?;
+
+            tasks.push(Task { id, prompt, status });
+        }
+
+        Ok(tasks)
     }
 
     // =====================================================

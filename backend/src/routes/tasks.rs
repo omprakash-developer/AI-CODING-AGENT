@@ -55,6 +55,11 @@ pub struct StreamQuery {
     pub token: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+pub struct ListTasksQuery {
+    pub limit: Option<usize>,
+}
+
 // ============================================================
 // EVENT BROADCAST & PERSISTENCE HELPER
 // ============================================================
@@ -218,6 +223,30 @@ pub async fn create_task(
             message: "Task created successfully. Gemini analysis has started.".to_string(),
         }),
     ))
+}
+
+// ============================================================
+// GET /tasks
+// ============================================================
+
+pub async fn list_tasks(
+    State(state): State<AppState>,
+    Query(query): Query<ListTasksQuery>,
+) -> Result<Json<Vec<Task>>, (StatusCode, Json<serde_json::Value>)> {
+    let limit = query.limit.unwrap_or(20).clamp(1, 100);
+
+    match state.database.list_tasks(limit) {
+        Ok(tasks) => Ok(Json(tasks)),
+        Err(error) => {
+            eprintln!("Failed to list tasks from database: {}", error);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Failed to retrieve task history: {}", error)
+                })),
+            ))
+        }
+    }
 }
 
 // ============================================================

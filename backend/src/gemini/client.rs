@@ -30,6 +30,11 @@ impl GeminiClient {
         })
     }
 
+    /// Return the configured Gemini model name.
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
     // ============================================================
     // NORMAL TEXT GENERATION
     // ============================================================
@@ -229,11 +234,32 @@ Response: {}",
             // ----------------------------------------------------
 
             if status.as_u16() == 429 {
+                // Attempt to extract a retry delay from the response body.
+                let retry_hint = serde_json::from_str::<Value>(&body)
+                    .ok()
+                    .and_then(|v| {
+                        v.get("error")
+                            .and_then(|e| e.get("details"))
+                            .and_then(|d| d.as_array())
+                            .and_then(|arr| {
+                                arr.iter().find_map(|item| {
+                                    item.get("retryDelay")
+                                        .and_then(|r| r.as_str())
+                                        .map(|s| s.to_string())
+                                })
+                            })
+                    });
+
+                let retry_msg = match retry_hint {
+                    Some(delay) => format!(" Retry after approximately {}.", delay),
+                    None => String::new(),
+                };
+
                 return Err(format!(
-                    "Gemini API returned 429 Too Many Requests. \
-The API quota or rate limit has been reached. \
-Model: '{}'. Response: {}",
-                    self.model, body
+                    "Gemini API quota exceeded (429 Too Many Requests). \
+Model: '{}'.{} \
+Please wait for the quota reset or configure a Gemini API key/model with available quota.",
+                    self.model, retry_msg
                 ));
             }
 

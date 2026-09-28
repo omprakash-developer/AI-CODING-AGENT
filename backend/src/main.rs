@@ -17,7 +17,8 @@ use crate::{
         graph::test_graph,
         memory::search_memory,
         sandbox::{run_revision_loop, run_sandbox, run_verification, test_sandbox},
-        tasks::{approve_task, create_task, get_task, stream_task},
+        system::system_status,
+        tasks::{approve_task, create_task, get_task, list_tasks, stream_task},
         tools::{git_branch, git_diff, git_status, list_files, read_file, write_file},
     },
     state::AppState,
@@ -93,10 +94,17 @@ async fn main() {
 
     let app = Router::new()
         // =================================================
+        // SYSTEM STATUS ROUTE
+        // =================================================
+        // Returns backend/model/transport info.
+        //
+        // GET /system/status
+        .route("/system/status", get(system_status))
+        // =================================================
         // TASK ROUTES
         // =================================================
-        // Create a new coding task
-        .route("/tasks", post(create_task))
+        // Create a new coding task / List persistent task history
+        .route("/tasks", post(create_task).get(list_tasks))
         // Get a task by ID
         .route("/tasks/{id}", get(get_task))
         // Stream task events using SSE
